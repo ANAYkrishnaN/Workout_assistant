@@ -15,18 +15,20 @@ import sklearn
 
 print("SKLEARN VERSION:", sklearn.__version__)
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
 from ultralytics import YOLO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-YOLO_MODEL_PATH = os.path.join(BASE_DIR, "runs", "detect", "smart_fridge", "weights", "best.pt")
-if not os.path.isfile(YOLO_MODEL_PATH):
-    raise FileNotFoundError(f"YOLO model not found: {YOLO_MODEL_PATH}")
-yolo_model = YOLO(YOLO_MODEL_PATH)
-print("YOLO model loaded successfully")
+YOLO_MODEL_PATH = os.environ.get("YOLO_MODEL_PATH") or os.path.join(BASE_DIR, "runs", "detect", "smart_fridge", "weights", "best.pt")
+yolo_model = None
+if os.path.isfile(YOLO_MODEL_PATH):
+    yolo_model = YOLO(YOLO_MODEL_PATH)
+    print("YOLO model loaded successfully")
+else:
+    print(f"Warning: YOLO model not found at {YOLO_MODEL_PATH}. /detect will return 503 until model is available.")
 
 MODEL_PATH = os.path.join(BASE_DIR, "models", "diet_model.pkl")
 print("Loading model from:", os.path.abspath(MODEL_PATH))
@@ -50,12 +52,14 @@ class PredictHydrationResponse(BaseModel):
     adjustment_breakdown: list[dict] = []
     explanation: str = ""
 
-app = FastAPI()
+app = FastAPI(title="Workout Assistant API", version="1.0.0")
 
-# CORS for Next.js frontend
+# CORS: use env in production (e.g. CORS_ORIGINS=https://yourdomain.com), default localhost for dev
+_CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").strip()
+_origins = [o.strip() for o in _CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -230,8 +234,16 @@ def predict_hydration(req: PredictHydrationRequest):
     )
 
 
+@app.get("/health")
+def health():
+    """Health check for load balancer and pipelines."""
+    return {"status": "ok", "yolo_loaded": yolo_model is not None}
+
+
 @app.post("/detect")
 async def detect(file: UploadFile = File(...)):
+    if yolo_model is None:
+        raise HTTPException(status_code=503, detail="Detection model not available.")
     try:
         content = await file.read()
         if not content:

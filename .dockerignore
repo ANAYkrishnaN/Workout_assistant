@@ -1,0 +1,37 @@
+# Dependencies
+node_modules
+.venv
+venv
+__pycache__
+*.py[cod]
+.pnp
+.pnp.*
+
+# Build / IDE
+.next
+out
+build
+.git
+.gitignore
+.env*
+!.env.example
+*.md
+!README.md
+
+# Tests and dev
+coverage
+.jest
+tests
+*.test.js
+*.spec.js
+
+# Large binaries (mount or copy at deploy)
+*.pt
+backend/runs
+
+# Sentry
+.env.sentry-build-plugin
+
+# OS
+.DS_Store
+Thumbs.db

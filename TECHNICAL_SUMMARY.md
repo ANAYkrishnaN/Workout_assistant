@@ -34,8 +34,13 @@ Diet and fridge flows use **only** the FastAPI ML backend and deterministic meal
 
 ```
 Workout_assistant/
+├── .dockerignore         # Excludes node_modules, .venv, .next, *.pt, .env* from Docker builds
 ├── .env.example          # Template; copy to .env.local (gitignored). App runs from .env.local.
 ├── .gitignore
+├── docker-compose.yml    # Local prod-like run (backend + frontend); set env for CORS and API URL
+├── Dockerfile.frontend   # Next.js standalone image; build args: NEXT_PUBLIC_API_URL, etc.
+├── DEPLOYMENT.md         # Production deployment (Docker, CI/CD, env, security)
+├── .github/workflows/ci.yml  # CI: frontend lint/test/build, backend verify, Docker build
 ├── eslint.config.mjs
 ├── instrumentation-client.js
 ├── instrumentation.js
@@ -57,7 +62,8 @@ Workout_assistant/
 │       └── windows_x86_64_20.0.0/
 │
 ├── backend/                      # FastAPI ML backend
-│   ├── main.py                   # FastAPI app: /detect, /predict-diet, /predict-hydration; mounts posture router
+│   ├── Dockerfile                # Production image; optional volume for best.pt
+│   ├── main.py                   # FastAPI app: /health, /detect, /predict-diet, /predict-hydration; mounts posture router
 │   ├── requirements.txt         # fastapi, uvicorn, ultralytics, opencv-python, mediapipe, etc.
 │   ├── train_diet_model.py      # Trains RandomForest, saves diet_model.pkl
 │   ├── train_yolo.py            # YOLOv8 training for Smart Fridge (best.pt)
@@ -166,7 +172,7 @@ Workout_assistant/
 
 - **File:** `backend/main.py`.
 - **Run:** From `backend/`: `uvicorn main:app --reload`. Backend reads `OPENWEATHER_API_KEY` from process environment if set (optional).
-- **CORS:** Allows `http://localhost:3000` (Next.js dev).
+- **CORS:** Controlled by env `CORS_ORIGINS` (comma-separated). Default `http://localhost:3000` for dev; in production set to your frontend origin(s), e.g. `https://yourdomain.com`.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -175,15 +181,16 @@ Workout_assistant/
 | `/detect` | POST | Multipart form with `file` (image). Runs YOLO (Smart Fridge `best.pt`), returns `{ detected_items: [...] }` (15-class names). |
 | `/posture/analyze` | POST | Multipart: `file`, `session_id`, `workout_name`, `mode`, `target_reps`. MediaPipe Pose → angles → rep count; returns reps, calories, angle, fps, message, done_by_target. |
 | `/posture/reset_session` | POST | JSON `{ session_id }`. Clears in-memory rep state for that session. |
+| `/health` | GET | Returns `{ status: "ok", yolo_loaded: boolean }`. Use for load balancer and pipeline health checks. |
 
 ### `/detect` endpoint logic
 
-1. **Load YOLO at startup:** `yolo_model = YOLO(YOLO_MODEL_PATH)` where `YOLO_MODEL_PATH` is `backend/runs/detect/smart_fridge/weights/best.pt` (Smart Fridge 15-class model). Fails at startup if file missing.
-2. **File handling:** Read upload bytes → `np.frombuffer` + `cv2.imdecode`; if invalid, return 400.
-3. **Inference:** `results = yolo_model(image, conf=0.25)`.
+1. **YOLO at startup:** `yolo_model` is loaded from `YOLO_MODEL_PATH` (default `backend/runs/detect/smart_fridge/weights/best.pt`, overridable via env). If the file is missing, the app still starts and `yolo_model` is `None`; `POST /detect` then returns **503** with detail `"Detection model not available."`.
+2. **File handling:** Read upload bytes → `np.frombuffer` + `cv2.imdecode`; if invalid, return error in response.
+3. **Inference:** `results = yolo_model(image, conf=0.25)` (only when `yolo_model` is set).
 4. **Parse boxes:** For each result, iterate `r.boxes`; get `class_id`, map to `yolo_model.names[class_id]` → class name.
 5. **Deduplicate:** `list(dict.fromkeys(detected_classes))`.
-6. **Response:** `{ "detected_items": [...] }` (or `{ "detected_items": [], "error": "..." }` on exception). No food-keyword filter; all 15 Smart Fridge classes returned.
+6. **Response:** `{ "detected_items": [...] }` (or 503 when model not loaded, or `{ "detected_items": [], "error": "..." }` on exception). No food-keyword filter; all 15 Smart Fridge classes returned.
 
 ### `/predict-diet` endpoint logic
 
@@ -196,8 +203,8 @@ Workout_assistant/
 ### Where YOLO model is loaded
 
 - **Location:** `backend/main.py`, at **startup**.
-- **Path:** `YOLO_MODEL_PATH = os.path.join(BASE_DIR, "runs", "detect", "smart_fridge", "weights", "best.pt")`. If file missing, app raises `FileNotFoundError` and does not start.
-- **Weights:** Custom Smart Fridge YOLOv8 model (15 classes). Trained via `backend/train_yolo.py`; outputs to `backend/runs/detect/smart_fridge/weights/best.pt`.
+- **Path:** `YOLO_MODEL_PATH` from env, or default `os.path.join(BASE_DIR, "runs", "detect", "smart_fridge", "weights", "best.pt")`. If the file is missing, the app still starts and `yolo_model` is `None`; `GET /health` reports `yolo_loaded: false` and `POST /detect` returns 503.
+- **Weights:** Custom Smart Fridge YOLOv8 model (15 classes). Trained via `backend/train_yolo.py`; outputs to `backend/runs/detect/smart_fridge/weights/best.pt`. In production (e.g. Docker), mount the weights or set `YOLO_MODEL_PATH` to the path inside the container.
 
 ### Where RandomForest model is loaded
 
@@ -297,16 +304,29 @@ So: **ingredients** come from YOLO (and manual edits) and are used only in the *
 | **NEXT_PUBLIC_OPENWEATHER_API_KEY** | Hydration.js, weatherApi.js | No | Client-side weather; optional. |
 | **GEMINI_API_KEY** / **NEXT_PUBLIC_GEMINI_API_KEY** | Chatbot.js | No | Chatbot only; not used by diet, detect, or posture. |
 | **SENTRY_DSN** | sentry.*.config.js | No | Error reporting. |
+| **CORS_ORIGINS** | Backend main.py | No (default: http://localhost:3000) | Comma-separated allowed origins. Set in production to frontend origin(s). |
+| **YOLO_MODEL_PATH** | Backend main.py | No | Path to Smart Fridge `best.pt`. Override for Docker/mounts; if unset, default path under `backend/` is used. |
 
 ---
 
-## 7. Known Issues / TODO Items
+## 7. Deployment (Docker, CI/CD, production)
+
+- **Docker:** `backend/Dockerfile` (FastAPI), `Dockerfile.frontend` (Next.js standalone). See `DEPLOYMENT.md` and `docker-compose.yml` for build/run and local prod-like runs.
+- **Next.js:** `next.config.mjs` sets `output: 'standalone'` for the frontend container.
+- **CI:** `.github/workflows/ci.yml` runs on push/PR to `main`/`develop`: frontend lint/test/build, backend install/verify, Docker build of both images. For AWS, add a deploy job (ECR push + ECS/App Runner update) using GitHub Secrets for credentials.
+- **Production env:** Set `CORS_ORIGINS` (backend), `NEXT_PUBLIC_API_URL` (frontend build), `NEXT_MONGODB_URI`; use AWS Secrets Manager or Parameter Store for secrets—do not commit real values.
+- **Health:** Backend `GET /health` returns `{ status: "ok", yolo_loaded: boolean }` for load balancers and pipelines.
+- **Security:** HTTPS in production; optional rate limiting and security headers; consider password hashing (e.g. bcrypt) for login (see PROJECT_SUMMARY).
+
+---
+
+## 8. Known Issues / TODO Items
 
 - **MongoDB required:** If `NEXT_MONGODB_URI` is not set, any route that uses `connectDB()` (e.g. auth, users) will throw. Ensure `.env.local` has a valid MongoDB URI.
 - **Diet model:** Trained on synthetic data only. For production, consider training on real diet/macro data.
-- **CORS:** Fixed to `http://localhost:3000`. For production, set `allow_origins` appropriately.
+- **CORS:** Default `http://localhost:3000`; for production set `CORS_ORIGINS` to your frontend origin(s).
 - **Posture:** Real MediaPipe Pose + rep logic; session state is in-memory (lost on backend restart). For production, consider persisting session or using a queue.
-- **YOLO:** Uses custom Smart Fridge `best.pt`; must exist at `backend/runs/detect/smart_fridge/weights/best.pt` or backend fails to start.
+- **YOLO:** Custom Smart Fridge `best.pt`; if missing, backend still starts but `POST /detect` returns 503. Provide weights via volume or `YOLO_MODEL_PATH` in production.
 
 ---
 

@@ -28,7 +28,7 @@ Frontend (Next.js, localhost:3000)
 
 - **Frontend** runs on **localhost:3000** (Next.js dev server).
 - **Backend** runs on **localhost:8000** (FastAPI with uvicorn).
-- **CORS** is configured on FastAPI to allow requests from `http://localhost:3000` (origins, methods, and headers as required).
+- **CORS** is configured via env `CORS_ORIGINS` (default `http://localhost:3000`); set to your frontend origin(s) in production.
 - **Diet and fridge flows** use only the FastAPI ML backend and Next.js API routes; no Gemini or OpenAI is used in these flows.
 
 ---
@@ -62,12 +62,12 @@ Frontend (Next.js, localhost:3000)
 
 ### 4.1 Food Detection Model
 
-- **Architecture:** Pretrained YOLOv8n (`yolov8n.pt`) via Ultralytics; loaded lazily on first `/detect` call. No custom YOLO training in this project.
-- **Role:** Runs object detection on the uploaded image; results are filtered to a hardcoded food-related subset of class names (e.g. apple, banana, orange, broccoli, carrot, sandwich, pizza, hot dog, bottle, cup).
-- **Output:** List of detected ingredient names (strings) that match the filter.
+- **Architecture:** Custom Smart Fridge YOLOv8 model (`best.pt`, 15 classes) via Ultralytics; loaded at backend startup from `backend/runs/detect/smart_fridge/weights/best.pt` (path overridable via `YOLO_MODEL_PATH`). If the file is missing, the backend still starts; `POST /detect` returns 503 with "Detection model not available."
+- **Role:** Runs object detection on the uploaded image; returns all 15 Smart Fridge class names (e.g. Beans, Egg, Tomato, etc.) as the ingredient list.
+- **Output:** List of detected ingredient names (strings).
 - **Endpoint:** `POST /detect`
   - **Input:** Multipart form with image file (field name `file`).
-  - **Output:** JSON array of strings, e.g. `["apple", "banana"]`.
+  - **Output:** JSON `{ "detected_items": ["...", ...] }` or 503 if the model is not loaded.
 
 ### 4.2 Diet Prediction Model
 
@@ -113,7 +113,7 @@ uvicorn main:app --reload
 ```
 
 - `train_diet_model.py` generates the synthetic dataset, trains the RandomForestRegressor, and saves the model to `models/diet_model.pkl`.
-- `main.py` loads the diet model at startup from `backend/models/diet_model.pkl` and exposes `/predict-diet` and `/detect`. YOLO is loaded on first `/detect` request using pretrained `yolov8n.pt`.
+- `main.py` loads the diet model at startup from `backend/models/diet_model.pkl` and the YOLO model from `best.pt` (Smart Fridge) if present; exposes `/predict-diet`, `/detect`, and `GET /health`. If `best.pt` is missing, the app still runs and `/detect` returns 503.
 
 ---
 
@@ -148,5 +148,6 @@ The Next.js app runs at **http://localhost:3000**. Set `NEXT_PUBLIC_API_URL=http
 - **No external LLM** is used for diet generation or fridge analysis; only ML models and rule-based meal plan assembly.
 - **Modular architecture** – Diet Planner, Posture Tracker, Chatbot, and other modules are kept separate; changes to diet/fridge do not alter Posture or Chatbot behavior.
 - **Posture and Chatbot modules** remain untouched by the diet/fridge and ML backend integration described in this summary.
-- **Detailed technical reference:** See **TECHNICAL_SUMMARY.md** for a full technical summary (folder structure, endpoint logic, model paths, frontend flow, environment, known issues) suitable for AI assistants or new developers.
-- **Limitations:** Diet model is trained on synthetic data only; YOLO uses a small fixed food filter (COCO-derived classes). `/detect` writes a temp file in the process cwd—run uvicorn from `backend/` to avoid path issues.
+- **Detailed technical reference:** See **TECHNICAL_SUMMARY.md** for a full technical summary (folder structure, endpoint logic, model paths, frontend flow, environment, deployment, known issues) suitable for AI assistants or new developers.
+- **Limitations:** Diet model is trained on synthetic data only; YOLO uses the custom Smart Fridge 15-class model. Run uvicorn from `backend/` so model paths resolve correctly; in production use Docker and mount or set `YOLO_MODEL_PATH`.
+- **Deployment:** The project is ready for AWS deployment: Dockerfiles (backend + frontend), `docker-compose.yml`, and GitHub Actions CI (`.github/workflows/ci.yml`) for lint, test, build, and Docker image build. See **DEPLOYMENT.md** for production env vars, CORS, health check (`GET /health`), and security (secrets, HTTPS, optional password hashing).

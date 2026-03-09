@@ -1,0 +1,40 @@
+# Local prod-like run. Set env in .env or override here.
+# Backend: ensure best.pt is available (volume or build copy) for /detect.
+# Frontend build args: set NEXT_PUBLIC_API_URL to backend URL (e.g. http://backend:8000 for same network).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - MONGODB_URI=${MONGODB_URI}
+      - YOLO_MODEL_PATH=${YOLO_MODEL_PATH:-}
+    volumes:
+      # Mount YOLO weights if present locally
+      - ./backend/runs/detect/smart_fridge/weights:/app/backend/runs/detect/smart_fridge/weights:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_OPENWEATHER_API_KEY: ${NEXT_PUBLIC_OPENWEATHER_API_KEY:-}
+        NEXT_PUBLIC_GEMINI_API_KEY: ${NEXT_PUBLIC_GEMINI_API_KEY:-}
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_MONGODB_URI=${NEXT_MONGODB_URI}
+    depends_on:
+      backend:
+        condition: service_healthy
