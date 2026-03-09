@@ -1,8 +1,13 @@
 import "@/styles/globals.css";
 import { Bounce, ToastContainer } from "react-toastify";
+import { LoadingProvider } from "@/context/LoadingContext";
+import GlobalLoader from "@/components/ui/GlobalLoader";
 
 export default function App({ Component, pageProps }) {
-  return <><ToastContainer
+  return (
+    <LoadingProvider>
+      <GlobalLoader />
+      <ToastContainer
     position="top-right"
     autoClose={5000}
     hideProgressBar={false}
@@ -14,5 +19,8 @@ export default function App({ Component, pageProps }) {
     pauseOnHover
     theme="light"
     transition={Bounce}
-  /><Component {...pageProps} /></>;
+  />
+      <Component {...pageProps} />
+    </LoadingProvider>
+  );
 }

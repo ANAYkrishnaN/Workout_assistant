@@ -122,7 +122,7 @@ const Workout = () => {
     return (
         <div className="space-y-6">
             {/* Tab Navigation */}
-            <div className="bg-white rounded-2xl p-2 shadow-lg">
+            <div className="bg-white rounded-2xl p-2 shadow-lg transition-shadow duration-200">
                 <div className="flex gap-2">
                     {[
                         { id: 'today', label: "Today's Workout", icon: '🎯' },
@@ -132,7 +132,7 @@ const Workout = () => {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all ${activeTab === tab.id
+                            className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.99] ${activeTab === tab.id
                                 ? 'bg-cyan-500 text-white shadow-md'
                                 : 'text-gray-600 hover:bg-gray-100'
                                 }`}
@@ -146,7 +146,7 @@ const Workout = () => {
 
             {/* Today's Workout */}
             {activeTab === 'today' && (
-                <div className="bg-white rounded-2xl p-8 shadow-lg">
+                <div className="bg-white rounded-2xl p-8 shadow-lg transition-shadow duration-200 hover:shadow-xl">
                     <div className="flex justify-between items-start mb-6">
                         <div>
                             <h2 className="text-3xl font-bold text-gray-800">{todayWorkout.focus}</h2>
@@ -168,7 +168,7 @@ const Workout = () => {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                             <div
-                                className="bg-linear-to-r from-cyan-400 to-blue-500 h-3 rounded-full transition-all duration-500"
+                                className="bg-gradient-to-r from-cyan-400 to-blue-500 h-3 rounded-full transition-[width] duration-500 ease-out"
                                 style={{ width: `${completionPercentage}%` }}
                             />
                         </div>
@@ -179,7 +179,7 @@ const Workout = () => {
                         {todayWorkout.exercises.map((exercise, index) => (
                             <div
                                 key={exercise.id}
-                                className={`border-2 rounded-xl p-5 transition-all ${exercise.completed
+                                className={`border-2 rounded-xl p-5 transition-all duration-200 ${exercise.completed
                                     ? 'border-green-300 bg-green-50'
                                     : 'border-gray-200 bg-white hover:border-cyan-300'
                                     }`}
@@ -187,7 +187,7 @@ const Workout = () => {
                                 <div className="flex items-start gap-4">
                                     <button
                                         onClick={() => toggleExerciseComplete(exercise.id)}
-                                        className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${exercise.completed
+                                        className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-200 active:scale-95 ${exercise.completed
                                             ? 'bg-green-500 border-green-500'
                                             : 'border-gray-300 hover:border-cyan-500'
                                             }`}
@@ -228,7 +228,7 @@ const Workout = () => {
                     </div>
 
                     {completionPercentage === 100 && (
-                        <div className="mt-6 p-5 bg-linear-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl">
+                        <div className="mt-6 p-5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl animate-fade-in">
                             <p className="text-lg font-bold text-green-800 text-center">
                                 🎉 Congratulations! You&apos;ve completed today&apos;s workout!
                             </p>
@@ -243,13 +243,13 @@ const Workout = () => {
                     {workoutPlan.upcoming.map((workout, index) => (
                         <div
                             key={index}
-                            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+                            className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer active:scale-[0.99]"
                             onClick={() => setSelectedWorkout(selectedWorkout === index ? null : index)}
                         >
                             <div className="flex justify-between items-start">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-12 h-12 bg-linear-to-br from-cyan-400 to-blue-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                                        <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
                                             {workout.day.substring(0, 3)}
                                         </div>
                                         <div>
@@ -265,9 +265,9 @@ const Workout = () => {
                             </div>
 
                             {selectedWorkout === index && (
-                                <div className="mt-6 pt-6 border-t border-gray-200 space-y-3">
+                                <div className="mt-6 pt-6 border-t border-gray-200 space-y-3 animate-fade-in">
                                     {workout.exercises.map((exercise, exIndex) => (
-                                        <div key={exIndex} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                        <div key={exIndex} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-colors duration-150 hover:bg-gray-100">
                                             <div className="w-8 h-8 bg-cyan-100 rounded-full flex items-center justify-center text-cyan-600 font-bold text-sm">
                                                 {exIndex + 1}
                                             </div>
@@ -292,12 +292,12 @@ const Workout = () => {
                     {workoutPlan.previous.map((workout, index) => (
                         <div
                             key={index}
-                            className="bg-white rounded-2xl p-6 shadow-lg"
+                            className="bg-white rounded-2xl p-6 shadow-lg transition-shadow duration-200 hover:shadow-xl"
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-12 h-12 bg-linear-to-br from-green-400 to-emerald-500 rounded-xl flex items-center justify-center text-white">
+                                        <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 rounded-xl flex items-center justify-center text-white">
                                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                             </svg>
@@ -316,9 +316,9 @@ const Workout = () => {
                                 </div>
                             </div>
 
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-4 overflow-hidden">
                                 <div
-                                    className={`h-2 rounded-full ${workout.completionRate === 100 ? 'bg-green-500' : 'bg-amber-500'}`}
+                                    className={`h-2 rounded-full transition-[width] duration-500 ease-out ${workout.completionRate === 100 ? 'bg-green-500' : 'bg-amber-500'}`}
                                     style={{ width: `${workout.completionRate}%` }}
                                 />
                             </div>

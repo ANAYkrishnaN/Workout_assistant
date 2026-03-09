@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { Camera, ChevronRight, Clock, Droplets, Dumbbell, MessageCircle, Play, TrendingUp } from 'lucide-react';
+import { getQuoteForToday } from "@/utils/dailyQuotes";
 
 const HomeComponent = ({ setActiveTab }) => {
     const [user, setUser] = useState(null);
@@ -142,6 +144,8 @@ const HomeComponent = ({ setActiveTab }) => {
         { name: "Plank", duration: "2 min", completed: false },
     ];
 
+    const dailyQuote = getQuoteForToday();
+
     return (
         <div className="space-y-6">
             {/* Greeting */}
@@ -149,10 +153,25 @@ const HomeComponent = ({ setActiveTab }) => {
                 Welcome back, {firstName}!
             </h2>
 
+            {/* Daily quote (date-based, subtle) */}
+            <p className="text-gray-500 text-sm italic">&ldquo;{dailyQuote}&rdquo;</p>
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <motion.div
+                className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                    visible: { transition: { staggerChildren: 0.08 } },
+                    hidden: {},
+                }}
+            >
                 {/* Workouts */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <motion.div
+                    className="bg-white rounded-2xl p-6 shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
+                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                    transition={{ duration: 0.25 }}
+                >
                     <div className="flex items-center justify-between mb-4">
                         <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
                             <Dumbbell className="w-6 h-6 text-cyan-500" />
@@ -160,10 +179,14 @@ const HomeComponent = ({ setActiveTab }) => {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-800">{weeklyStats.workouts}</h3>
                     <p className="text-gray-500 text-sm">Workouts completed</p>
-                </div>
+                </motion.div>
 
                 {/* Total Time */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <motion.div
+                    className="bg-white rounded-2xl p-6 shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
+                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                    transition={{ duration: 0.25 }}
+                >
                     <div className="flex items-center justify-between mb-4">
                         <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                             <Clock className="w-6 h-6 text-blue-500" />
@@ -171,10 +194,14 @@ const HomeComponent = ({ setActiveTab }) => {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-800">{weeklyStats.totalTime} min</h3>
                     <p className="text-gray-500 text-sm">Total workout time</p>
-                </div>
+                </motion.div>
 
                 {/* Calories */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <motion.div
+                    className="bg-white rounded-2xl p-6 shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
+                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                    transition={{ duration: 0.25 }}
+                >
                     <div className="flex items-center justify-between mb-4">
                         <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                             <TrendingUp className="w-6 h-6 text-orange-500" />
@@ -182,19 +209,24 @@ const HomeComponent = ({ setActiveTab }) => {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-800">{weeklyStats.calories}</h3>
                     <p className="text-gray-500 text-sm">Calories burned</p>
-                </div>
-            </div>
+                </motion.div>
+            </motion.div>
 
             {/* Today's Workouts & Hydration */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Today's Workouts */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <motion.div
+                    className="bg-white rounded-2xl p-6 shadow-lg transition-shadow duration-200 hover:shadow-xl"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: 0.1 }}
+                >
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-xl font-bold text-gray-800">Today&apos;s Workouts</h3>
                     </div>
                     <div className="space-y-4">
                         {todayWorkouts.map((workout, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                            <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl transition-colors duration-150 hover:bg-gray-100">
                                 <div className="flex items-center space-x-4">
                                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${workout.completed ? "bg-green-100 text-green-500" : "bg-gray-200 text-gray-400"
                                         }`}>
@@ -212,10 +244,15 @@ const HomeComponent = ({ setActiveTab }) => {
                             </div>
                         ))}
                     </div>
-                </div>
+                </motion.div>
 
                 {/* Hydration - Now reads from user.hydration in database */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <motion.div
+                    className="bg-white rounded-2xl p-6 shadow-lg transition-shadow duration-200 hover:shadow-xl"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: 0.15 }}
+                >
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-xl font-bold text-gray-800">Hydration Today</h3>
                         <Droplets className="w-6 h-6 text-cyan-500" />
@@ -260,18 +297,18 @@ const HomeComponent = ({ setActiveTab }) => {
                     {/* Quick action to go to hydration tracker */}
                     <button
                         onClick={() => setActiveTab("hydration")}
-                        className="w-full py-2 px-4 bg-cyan-50 hover:bg-cyan-100 text-cyan-600 rounded-lg text-sm font-medium transition-colors"
+                        className="w-full py-2 px-4 bg-cyan-50 hover:bg-cyan-100 text-cyan-600 rounded-lg text-sm font-medium transition-colors duration-200 active:scale-[0.99]"
                     >
                         Update Hydration →
                     </button>
-                </div>
+                </motion.div>
             </div>
 
             {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <button
                     onClick={() => setActiveTab("camera")}
-                    className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl transition-all"
+                    className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 text-left"
                 >
                     <Camera className="w-8 h-8 mb-3" />
                     <h3 className="text-xl font-bold mb-2">Track Your Posture</h3>
@@ -280,7 +317,7 @@ const HomeComponent = ({ setActiveTab }) => {
 
                 <button
                     onClick={() => setActiveTab("chat")}
-                    className="bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl transition-all"
+                    className="bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 text-left"
                 >
                     <MessageCircle className="w-8 h-8 mb-3" />
                     <h3 className="text-xl font-bold mb-2">AI Workout Assistant</h3>

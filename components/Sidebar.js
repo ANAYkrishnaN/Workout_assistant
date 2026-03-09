@@ -2,26 +2,48 @@
 import { Calendar, Camera, Droplets, Dumbbell, Home, LogOut, MessageCircle, Settings, Drumstick } from "lucide-react";
 import { useRouter } from "next/router";
 import React from "react";
+import { motion } from "framer-motion";
 
 const Sidebar = ({ activeTab, sidebarOpen, setActiveTab, setSidebarOpen }) => {
   const router = useRouter();
+
   const NavigationItem = ({ icon: Icon, label, value, active }) => (
-    <button
+    <motion.button
       onClick={() => {
         setActiveTab(value);
         setSidebarOpen(false);
       }}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${active
-        ? "bg-linear-to-r from-cyan-400 to-blue-500 text-white"
-        : "text-gray-600 hover:bg-gray-100"
+      className={`relative w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-[background-color,box-shadow] duration-300 ease-out ${active
+        ? "text-white"
+        : "text-gray-600 hover:bg-gray-100 hover:shadow-[0_0_14px_rgba(6,182,212,0.15)] active:scale-[0.99]"
         }`}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
     >
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{label}</span>
-    </button>
+      {active && (
+        <motion.div
+          className="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 shadow-sm"
+          layoutId="sidebar-active"
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          style={{ boxShadow: "0 0 12px rgba(6, 182, 212, 0.4)" }}
+        />
+      )}
+      <span className="relative z-10 flex items-center space-x-3">
+        <motion.span
+          className="flex-shrink-0"
+          whileHover={active ? {} : { rotate: 8 }}
+          transition={{ duration: 0.2 }}
+        >
+          <Icon className="w-5 h-5" />
+        </motion.span>
+        <span className="font-medium">{label}</span>
+      </span>
+    </motion.button>
   );
-  return <aside
-    className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 transform transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+
+  return (
+  <aside
+    className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
       } lg:translate-x-0`}
   >
     <div className="p-6">
@@ -86,15 +108,14 @@ const Sidebar = ({ activeTab, sidebarOpen, setActiveTab, setSidebarOpen }) => {
           value="settings"
           active={activeTab === "settings"}
         />
-        <button onClick={() => router.push("/")} className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-all cursor-pointer">
+        <button onClick={() => router.push("/")} className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors duration-200 cursor-pointer active:scale-[0.99]">
           <LogOut className="w-5 h-5" />
           <span className="font-medium">Logout</span>
         </button>
       </div>
     </div>
   </aside>
-
-
+  );
 };
 
 export default Sidebar;

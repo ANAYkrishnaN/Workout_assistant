@@ -1,0 +1,30 @@
+path: databases/smart_fridge
+
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 15
+names: 
+  0: Beans
+  1: Bitter Gourd
+  2: Brinjal
+  3: Cabbage
+  4: Capsicum
+  5: Carrot
+  6: Chayote
+  7: Cucumber
+  8: Egg
+  9: Eggplant
+  10: Ginger
+  11: Green Chilly
+  12: Ladies Finger
+  13: Tomato
+  14: Turnip
+
+roboflow:
+  workspace: personal-2uusc
+  project: smart_refrigerator
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/personal-2uusc/smart_refrigerator/dataset/2

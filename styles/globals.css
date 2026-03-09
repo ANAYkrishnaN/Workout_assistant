@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-smooth: cubic-bezier(0.33, 1, 0.68, 1);
+  --duration-ui: 200ms;
+  --duration-sheet: 300ms;
 }
 
 @theme inline {
@@ -19,8 +23,73 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s var(--ease-out-smooth) forwards;
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.3s var(--ease-out-smooth) forwards;
+}
+
+/* Global loader: animated progress dots (lightweight, no layout thrash) */
+@keyframes loader-dots {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.loader-dots {
+  animation: loader-dots 0.8s ease-in-out infinite;
+}
+
+/* Respect reduced motion for loader */
+@media (prefers-reduced-motion: reduce) {
+  .loader-dots {
+    animation: none;
+    opacity: 1;
+  }
 }

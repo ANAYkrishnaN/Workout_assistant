@@ -13,16 +13,15 @@ const mockStream = {
 };
 
 beforeEach(() => {
-    process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
     jest.spyOn(console, "error").mockImplementation(() => { });
 
     global.fetch = jest.fn((url) => {
-        if (url.includes("/create_session"))
+        if (typeof url === "string" && url.includes("/api/posture/create_session"))
             return Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({ session_id: "abc123" }),
             });
-        if (url.includes("/analyze"))
+        if (typeof url === "string" && url.includes("/api/posture/analyze"))
             return Promise.resolve({
                 ok: true,
                 json: () =>
@@ -35,7 +34,7 @@ beforeEach(() => {
                         detected_label: "Push Up",
                     }),
             });
-        if (url.includes("/reset_session"))
+        if (typeof url === "string" && url.includes("/api/posture/reset_session"))
             return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
@@ -110,7 +109,7 @@ test("calls createSession with correct method on start", async () => {
 
     await waitFor(() =>
         expect(fetch).toHaveBeenCalledWith(
-            expect.stringContaining("/create_session"),
+            "/api/posture/create_session",
             expect.objectContaining({ method: "POST" })
         )
     );

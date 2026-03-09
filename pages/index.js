@@ -208,8 +208,8 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center p-4">
       <ToastContainer />
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+      <div className="w-full max-w-md animate-fade-in-scale">
+        <div className="bg-white rounded-2xl shadow-lg p-8 transition-shadow duration-300 hover:shadow-xl">
 
           {/* Logo/Header */}
           <div className="flex flex-col items-center mb-8">
@@ -241,7 +241,7 @@ export default function AuthPage() {
                   value={formData.name}
                   onChange={handleChange}
                   disabled={isLoading}
-                  className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-[border-color,box-shadow] duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
                   placeholder="Enter your name"
                   required={!isLogin}
                 />
@@ -262,7 +262,7 @@ export default function AuthPage() {
                 value={formData.email}
                 onChange={handleChange}
                 disabled={isLoading}
-                className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-[border-color,box-shadow] duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
                 placeholder="Enter your email"
                 required
               />
@@ -282,7 +282,7 @@ export default function AuthPage() {
                 value={formData.password}
                 onChange={handleChange}
                 disabled={isLoading}
-                className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-[border-color,box-shadow] duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
                 placeholder="Enter your password"
                 required
               />
@@ -303,7 +303,7 @@ export default function AuthPage() {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   disabled={isLoading}
-                  className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 rounded-xl border text-gray-700 border-gray-200 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-[border-color,box-shadow] duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
                   placeholder="Confirm your password"
                   required={!isLogin}
                 />
@@ -332,7 +332,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white py-3 rounded-xl font-medium hover:from-cyan-500 hover:to-blue-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-white py-3 rounded-xl font-medium hover:from-cyan-500 hover:to-blue-600 transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -361,7 +361,7 @@ export default function AuthPage() {
           <div className="grid grid-cols-2 gap-3">
             <button
               disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -387,7 +387,7 @@ export default function AuthPage() {
             </button>
             <button
               disabled={isLoading}
-              className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-5 h-5" fill="#1877F2" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />

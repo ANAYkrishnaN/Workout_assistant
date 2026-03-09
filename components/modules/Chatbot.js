@@ -383,7 +383,7 @@ Generate ${workoutDays} complete workout days following the exact format in your
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-lg h-[600px] lg:h-[85vh] flex flex-col">
+        <div className="bg-white rounded-2xl shadow-lg h-[600px] lg:h-[85vh] flex flex-col transition-shadow duration-200">
             <div className="p-6 border-b">
                 <h3 className="text-2xl font-bold text-gray-600">AI Workout Assistant</h3>
                 <p className="text-gray-600 text-sm">Powered by Google Gemini AI</p>
@@ -402,8 +402,8 @@ Generate ${workoutDays} complete workout days following the exact format in your
                         {messages.map((msg, i) => (
                             <div key={i} className={`flex items-start space-x-3 ${msg.role === "user" ? "flex-row-reverse space-x-reverse" : ""}`}>
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${msg.role === "assistant"
-                                    ? "bg-linear-to-br from-cyan-400 to-blue-500"
-                                    : "bg-linear-to-br from-purple-400 to-pink-500"
+                                    ? "bg-gradient-to-br from-cyan-400 to-blue-500"
+                                    : "bg-gradient-to-br from-purple-400 to-pink-500"
                                     }`}>
                                     {msg.role === "assistant" ? (
                                         <MessageCircle className="w-4 h-4 text-white" />
@@ -413,7 +413,7 @@ Generate ${workoutDays} complete workout days following the exact format in your
                                 </div>
                                 <div className={`p-4 rounded-2xl max-w-2xl ${msg.role === "assistant"
                                     ? "bg-gray-100 rounded-tl-none text-gray-800"
-                                    : "bg-linear-to-br from-cyan-400 to-blue-500 text-white rounded-tr-none"
+                                    : "bg-gradient-to-br from-cyan-400 to-blue-500 text-white rounded-tr-none"
                                     }`}>
                                     {msg.role === "assistant" ? (
                                         <div className="whitespace-pre-wrap">
@@ -427,7 +427,7 @@ Generate ${workoutDays} complete workout days following the exact format in your
                         ))}
                         {isLoading && (
                             <div className="flex items-start space-x-3">
-                                <div className="w-8 h-8 bg-linear-to-br from-cyan-400 to-blue-500 rounded-lg flex items-center justify-center">
+                                <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-lg flex items-center justify-center">
                                     <MessageCircle className="text-white w-4 h-4" />
                                 </div>
                                 <div className="bg-gray-100 p-4 rounded-2xl">
@@ -447,12 +447,12 @@ Generate ${workoutDays} complete workout days following the exact format in your
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSubmit()}
                     placeholder={checkingProfile ? "Loading..." : collectingProfile ? "Answer the question..." : "Ask me anything about fitness..."}
                     disabled={checkingProfile}
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-800"
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-800 transition-[border-color,box-shadow] duration-200"
                 />
                 <button
                     onClick={handleSubmit}
                     disabled={!input.trim() || isLoading || checkingProfile}
-                    className="px-6 py-3 bg-cyan-500 text-white rounded-xl flex items-center space-x-2 hover:bg-cyan-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    className="px-6 py-3 bg-cyan-500 text-white rounded-xl flex items-center space-x-2 hover:bg-cyan-600 transition-colors duration-200 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                     {isLoading ? (
                         <>

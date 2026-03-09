@@ -178,7 +178,7 @@ export default function UserProfile() {
                     <p className="text-gray-600 mb-6">{error}</p>
                     <button
                         onClick={() => router.push('')}
-                        className="px-6 py-3 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition font-medium"
+                        className="px-6 py-3 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition-colors duration-200 active:scale-[0.99] font-medium"
                     >
                         Go to Login
                     </button>
@@ -200,7 +200,7 @@ export default function UserProfile() {
                     </div>
                     <button
                         onClick={() => router.push("/dashboard")}
-                        className="cursor-pointer flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition font-medium"
+                        className="cursor-pointer flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition-colors duration-200 font-medium"
                     >
                         <ArrowLeft className="w-4 h-4" />
                         Back to Dashboard
@@ -219,7 +219,7 @@ export default function UserProfile() {
 
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
                 {/* Profile Header */}
-                <div className="bg-white rounded-2xl shadow-lg p-8 flex flex-col md:flex-row justify-between items-center gap-6">
+                <div className="bg-white rounded-2xl shadow-lg p-8 flex flex-col md:flex-row justify-between items-center gap-6 animate-fade-in">
                     <div className="flex items-center gap-6">
                         <div className="w-24 h-24 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-full flex items-center justify-center shadow-xl">
                             <User className="w-12 h-12 text-white" />
@@ -237,7 +237,7 @@ export default function UserProfile() {
                         {!isEditing ? (
                             <button
                                 onClick={handleEdit}
-                                className="flex items-center gap-2 px-6 py-3 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition font-medium"
+                                className="flex items-center gap-2 px-6 py-3 bg-cyan-500 text-white rounded-xl hover:bg-cyan-600 transition-colors duration-200 active:scale-[0.99] font-medium"
                             >
                                 <Edit2 className="w-5 h-5" /> Edit Profile
                             </button>
@@ -246,7 +246,7 @@ export default function UserProfile() {
                                 <button
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors duration-200 active:scale-[0.99] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {saving ? (
                                         <>
@@ -261,7 +261,7 @@ export default function UserProfile() {
                                 <button
                                     onClick={handleCancel}
                                     disabled={saving}
-                                    className="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors duration-200 active:scale-[0.99] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <X className="w-5 h-5" /> Cancel
                                 </button>
@@ -278,7 +278,7 @@ export default function UserProfile() {
                         { label: 'Height', value: profile.height + '"', color: 'gray' },
                         { label: 'Age', value: profile.age, color: 'gray' },
                     ].map((stat) => (
-                        <div key={stat.label} className="bg-white rounded-xl shadow p-6 text-center hover:shadow-lg transition">
+                        <div key={stat.label} className="bg-white rounded-xl shadow p-6 text-center hover:shadow-lg transition-shadow duration-200">
                             <p className="text-gray-600 font-medium">{stat.label}</p>
                             <p className="text-3xl font-bold text-gray-900">
                                 {stat.value.split(' ')[0]}
@@ -344,7 +344,7 @@ export default function UserProfile() {
 
 // --- Reusable Card Component ---
 const Card = ({ title, icon, children }) => (
-    <div className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition">
+    <div className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-200">
         <div className="flex items-center gap-2 mb-6 pb-2 border-b border-gray-100">
             <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">{icon}</div>
             <h3 className="text-lg font-bold text-gray-900">{title}</h3>

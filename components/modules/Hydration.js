@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { toast } from "react-toastify";
+import { useLoading } from "@/context/LoadingContext";
+import { fetchWeatherForHydration } from "@/utils/weatherApi";
 
 const STORAGE_KEY = "hydration_history_dataset";
 
@@ -35,7 +38,21 @@ const inferHydrationDecision = (avgPercent, intensity) => {
     }
 };
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const formatTimeForLog = () => {
+    const d = new Date();
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const am = h < 12;
+    const h12 = h % 12 || 12;
+    return `${h12}:${m < 10 ? "0" : ""}${m} ${am ? "AM" : "PM"}`;
+};
+
+const DEFAULT_CITY = "London";
+
 const Hydration = () => {
+    const { showLoader, hideLoader } = useLoading();
     // User data from database
     const [userId, setUserId] = useState(null);
     const [loadingUser, setLoadingUser] = useState(true);
@@ -46,6 +63,11 @@ const Hydration = () => {
     const [lastDrinkTime, setLastDrinkTime] = useState(null);
     const [notifications, setNotifications] = useState(true);
     const [workoutIntensity, setWorkoutIntensity] = useState("moderate");
+
+    // Adaptive hydration prediction (once per load)
+    const [hydrationPrediction, setHydrationPrediction] = useState(null);
+    const predictionFetchedRef = React.useRef(false);
+    const [todayLog, setTodayLog] = useState({ entries: [], total: 0 });
 
     // ML input fields
     const [mlInputs, setMlInputs] = useState({
@@ -64,7 +86,7 @@ const Hydration = () => {
     const [weatherError, setWeatherError] = useState(null);
     const [locationData, setLocationData] = useState(null);
 
-    // ML prediction result
+    // ML prediction result (legacy calculator)
     const [mlPrediction, setMlPrediction] = useState(null);
     const [predictingML, setPredictingML] = useState(false);
 
@@ -136,45 +158,35 @@ const Hydration = () => {
         });
     };
 
-    // Fetch weather data from Open-Meteo API
+    // Fetch weather: OpenWeather (if API key) else Open-Meteo
     const fetchWeatherData = async () => {
         setFetchingWeather(true);
         setWeatherError(null);
-
         try {
             const location = await getUserLocation();
             setLocationData(location);
-
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&current=temperature_2m,relative_humidity_2m&timezone=auto`;
-
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch weather data');
-            }
-
-            const data = await response.json();
-
+            const w = await fetchWeatherForHydration({
+                latitude: location.latitude,
+                longitude: location.longitude,
+            });
+            if (!w) throw new Error("Failed to fetch weather data");
             const currentWeather = {
-                temperature: Math.round(data.current.temperature_2m),
-                humidity: Math.round(data.current.relative_humidity_2m),
+                temperature: w.temperature,
+                humidity: w.humidity,
                 season: getCurrentSeason(),
-                latitude: data.latitude,
-                longitude: data.longitude,
+                latitude: location.latitude,
+                longitude: location.longitude,
             };
-
             setWeatherData(currentWeather);
-
             setMlInputs((prev) => ({
                 ...prev,
                 temperature: currentWeather.temperature,
                 humidity: currentWeather.humidity,
                 season: currentWeather.season,
             }));
-
         } catch (error) {
             console.error("Error fetching weather:", error);
-            setWeatherError(error.message);
+            setWeatherError(error?.message || "Failed to fetch weather");
         } finally {
             setFetchingWeather(false);
         }
@@ -245,6 +257,91 @@ const Hydration = () => {
 
         fetchUserData();
     }, []);
+
+    // Fetch today's log when userId is available
+    useEffect(() => {
+        if (!userId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/hydration/log?userId=${userId}`);
+                const data = await res.json();
+                if (cancelled || !data.success) return;
+                setTodayLog(data.log || { entries: [], total: 0 });
+                setWaterIntake(data.log?.total ?? 0);
+            } catch (e) {
+                if (!cancelled) console.error("Fetch hydration log:", e);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [userId]);
+
+    // One-time: fetch weather (OpenWeather or Open-Meteo), then call /predict-hydration
+    useEffect(() => {
+        if (predictionFetchedRef.current || !userId || loadingUser) return;
+        let cancelled = false;
+        const weight = mlInputs.weight ? Number(mlInputs.weight) : 70;
+        showLoader("AI calculating your personalized plan...");
+        const run = async () => {
+            let temperature = 22;
+            let humidity = 50;
+            const city = typeof window !== "undefined" ? (localStorage.getItem("hydration_city") || DEFAULT_CITY) : DEFAULT_CITY;
+            try {
+                const apiKey = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+                if (apiKey && city) {
+                    const w = await fetchWeatherForHydration({ city });
+                    if (w) {
+                        temperature = w.temperature;
+                        humidity = w.humidity;
+                    }
+                } else {
+                    const loc = await getUserLocation();
+                    const w = await fetchWeatherForHydration({ latitude: loc.latitude, longitude: loc.longitude });
+                    if (w) {
+                        temperature = w.temperature;
+                        humidity = w.humidity;
+                    }
+                }
+            } catch (_) { /* use defaults */ }
+            if (cancelled) {
+                hideLoader();
+                return;
+            }
+            const workoutIntensity = typeof window !== "undefined" ? (localStorage.getItem("hydration_workout_intensity") || "none") : "none";
+            const detectedWorkoutType = typeof window !== "undefined" ? localStorage.getItem("lastDetectedWorkoutType") : null;
+            try {
+                const res = await fetch(`${BACKEND_URL}/predict-hydration`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        weight,
+                        temperature,
+                        humidity,
+                        workout_minutes: 0,
+                        sleep_hours: 7,
+                        city: city || undefined,
+                        workout_intensity: workoutIntensity || "none",
+                        detected_workout_type: detectedWorkoutType || undefined,
+                    }),
+                });
+                if (!res.ok) return;
+                const pred = await res.json();
+                if (cancelled) return;
+                predictionFetchedRef.current = true;
+                setHydrationPrediction(pred);
+                setDailyGoal(pred.adjusted_goal ?? dailyGoal);
+            } catch (e) {
+                if (!cancelled) console.error("Predict hydration:", e);
+            } finally {
+                if (!cancelled) hideLoader();
+            }
+        };
+        run();
+        return () => {
+            cancelled = true;
+            hideLoader();
+        };
+    }, [userId, loadingUser, mlInputs.weight]);
 
     // Predict hydration using ML model
     const predictHydration = async () => {
@@ -374,62 +471,62 @@ const Hydration = () => {
     };
 
     const addWater = async (amount) => {
-        const newIntake = Math.min(waterIntake + amount, dailyGoal);
-        setWaterIntake(newIntake);
         setLastDrinkTime(Date.now());
+        const timeStr = formatTimeForLog();
 
-        // Sync with API if user is logged in
         if (userId) {
             try {
-                const response = await fetch('/api/update-hydration', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        userId,
-                        currentProgress: newIntake,
-                    }),
+                const response = await fetch("/api/hydration/log", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId, time: timeStr, amount }),
                 });
-
-                if (response.ok) {
-                    const { user } = await response.json();
-                    localStorage.setItem('user', JSON.stringify(user));
-                    console.log('Hydration synced with database');
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    setWaterIntake(data.log.total);
+                    setTodayLog(data.log);
+                    const u = localStorage.getItem("user");
+                    if (u) {
+                        const parsed = JSON.parse(u);
+                        parsed.hydration = { ...parsed.hydration, currentProgress: data.log.total };
+                        localStorage.setItem("user", JSON.stringify(parsed));
+                    }
                 } else {
-                    console.error('Failed to sync hydration with database');
+                    setWaterIntake((prev) => prev + amount);
                 }
             } catch (error) {
-                console.error('Error syncing hydration:', error);
+                console.error("Error logging hydration:", error);
+                setWaterIntake((prev) => Math.min(prev + amount, dailyGoal));
             }
+        } else {
+            setWaterIntake((prev) => Math.min(prev + amount, dailyGoal));
         }
     };
 
     const resetDaily = async () => {
         setWaterIntake(0);
         setLastDrinkTime(null);
+        setTodayLog({ entries: [], total: 0 });
 
-        // Sync reset with API if user is logged in
         if (userId) {
             try {
-                const response = await fetch('/api/update-hydration', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        userId,
-                        currentProgress: 0,
-                    }),
+                const response = await fetch("/api/hydration/log", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId, reset: true }),
                 });
-
                 if (response.ok) {
-                    const { user } = await response.json();
-                    localStorage.setItem('user', JSON.stringify(user));
-                    console.log('Hydration reset synced with database');
+                    const data = await response.json();
+                    if (data.success && data.user) localStorage.setItem("user", JSON.stringify(data.user));
+                    const u = localStorage.getItem("user");
+                    if (u) {
+                        const parsed = JSON.parse(u);
+                        parsed.hydration = { ...parsed.hydration, currentProgress: 0 };
+                        localStorage.setItem("user", JSON.stringify(parsed));
+                    }
                 }
             } catch (error) {
-                console.error('Error syncing reset:', error);
+                console.error("Error resetting hydration log:", error);
             }
         }
     };
@@ -458,22 +555,49 @@ const Hydration = () => {
     }
 
     return (
-        <div className="bg-linear-to-br from-blue-50 to-cyan-50 min-h-screen p-6">
-            <div className="bg-white rounded-2xl p-8 shadow-lg max-w-8xl mx-auto">
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 min-h-screen p-6">
+            <motion.div
+                className="bg-white rounded-2xl p-8 shadow-lg max-w-8xl mx-auto transition-shadow duration-200 hover:shadow-xl"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+            >
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-2xl font-bold text-gray-800">
                         Hydration Tracker 💧
                     </h3>
                     <button
                         onClick={resetDaily}
-                        className="text-sm text-cyan-600 hover:text-cyan-700 font-medium"
+                        className="text-sm text-cyan-600 hover:text-cyan-700 font-medium transition-colors duration-200 active:scale-[0.98]"
                     >
                         Reset Daily
                     </button>
                 </div>
 
+                {/* Adaptive goal banner with backend explanation */}
+                {hydrationPrediction && (
+                    <div className="mb-6 p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border border-cyan-100">
+                        {hydrationPrediction.explanation ? (
+                            <p className="text-gray-800 font-medium mb-2">{hydrationPrediction.explanation}</p>
+                        ) : (
+                            <p className="text-gray-800 font-medium mb-2">
+                                Today&apos;s hydration goal adjusted to <strong>{Math.round(hydrationPrediction.adjusted_goal)}ml</strong>
+                                {hydrationPrediction.adjustments?.length > 0 && hydrationPrediction.adjustments[0] !== "Base goal only"
+                                    ? " due to " + (hydrationPrediction.adjustments[0] || "").toLowerCase().replace(" adjustment", "")
+                                    : ""}.
+                            </p>
+                        )}
+                        <div className="text-sm text-gray-600 space-y-1">
+                            <div>Base goal: {Math.round(hydrationPrediction.base_goal)}ml</div>
+                            {(hydrationPrediction.adjustment_breakdown || []).map((item, i) => (
+                                <div key={i}>+{item.amount}ml {item.label}</div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* ML Prediction Section */}
-                <div className="mb-8 bg-linear-to-br from-purple-50 to-blue-50 rounded-xl p-6">
+                <div className="mb-8 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6">
                     <h4 className="text-lg font-bold text-gray-800 mb-4">
                         🤖 AI-Powered Hydration Calculator
                     </h4>
@@ -487,7 +611,7 @@ const Hydration = () => {
                             <button
                                 onClick={fetchWeatherData}
                                 disabled={fetchingWeather}
-                                className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 active:scale-[0.98]"
                             >
                                 {fetchingWeather ? "Fetching..." : "Get Weather"}
                             </button>
@@ -517,19 +641,19 @@ const Hydration = () => {
 
                         {weatherData && (
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between p-2 bg-linear-to-r from-orange-50 to-red-50 rounded-lg">
+                                <div className="flex items-center justify-between p-2 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg">
                                     <span className="text-sm text-gray-700">🌡️ Temperature</span>
                                     <span className="text-lg font-bold text-orange-600">
                                         {weatherData.temperature}°C
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-between p-2 bg-linear-to-r from-blue-50 to-cyan-50 rounded-lg">
+                                <div className="flex items-center justify-between p-2 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg">
                                     <span className="text-sm text-gray-700">💧 Humidity</span>
                                     <span className="text-lg font-bold text-blue-600">
                                         {weatherData.humidity}%
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-between p-2 bg-linear-to-r from-green-50 to-emerald-50 rounded-lg">
+                                <div className="flex items-center justify-between p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
                                     <span className="text-sm text-gray-700">🍂 Season</span>
                                     <span className="text-lg font-bold text-green-600">
                                         {weatherData.season}
@@ -558,7 +682,7 @@ const Hydration = () => {
                                 type="number"
                                 value={mlInputs.age}
                                 onChange={(e) => handleInputChange("age", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                                 placeholder="25"
                             />
                         </div>
@@ -568,7 +692,7 @@ const Hydration = () => {
                                 type="number"
                                 value={mlInputs.weight}
                                 onChange={(e) => handleInputChange("weight", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                                 placeholder="70"
                             />
                         </div>
@@ -578,7 +702,7 @@ const Hydration = () => {
                                 type="number"
                                 value={mlInputs.height}
                                 onChange={(e) => handleInputChange("height", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                                 placeholder="175"
                             />
                         </div>
@@ -590,7 +714,7 @@ const Hydration = () => {
                                 type="number"
                                 value={mlInputs.temperature}
                                 onChange={(e) => handleInputChange("temperature", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                                 placeholder="Auto from weather"
                             />
                         </div>
@@ -600,7 +724,7 @@ const Hydration = () => {
                                 type="number"
                                 value={mlInputs.humidity}
                                 onChange={(e) => handleInputChange("humidity", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                                 placeholder="Auto from weather"
                             />
                         </div>
@@ -609,7 +733,7 @@ const Hydration = () => {
                             <select
                                 value={mlInputs.season}
                                 onChange={(e) => handleInputChange("season", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                             >
                                 <option value="">Select Season</option>
                                 <option value="Spring">Spring</option>
@@ -623,7 +747,7 @@ const Hydration = () => {
                             <select
                                 value={mlInputs.workout_goal}
                                 onChange={(e) => handleInputChange("workout_goal", e.target.value)}
-                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-gray-700 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-[border-color,box-shadow] duration-200"
                             >
                                 <option value="">Select Workout Goal</option>
                                 <option value="Build Muscle">Build Muscle</option>
@@ -638,14 +762,14 @@ const Hydration = () => {
                     <button
                         onClick={predictHydration}
                         disabled={predictingML}
-                        className="w-full py-3 bg-linear-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+                        className="w-full py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.99]"
                     >
                         {predictingML ? "Calculating..." : "Calculate Optimal Hydration"}
                     </button>
 
                     {/* ML Prediction Result */}
                     {mlPrediction && (
-                        <div className="mt-4 p-4 bg-white rounded-lg border-2 border-purple-300 shadow-sm">
+                        <div className="mt-4 p-4 bg-white rounded-lg border-2 border-purple-300 shadow-sm animate-fade-in">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-sm font-semibold text-gray-700">
                                     🎯 Recommended Daily Intake
@@ -662,7 +786,7 @@ const Hydration = () => {
                     )}
                 </div>
 
-                {/* Daily Goal Progress */}
+                {/* Daily Goal Progress (cumulative: total consumed / adjusted goal) */}
                 <div className="mb-8">
                     <div className="flex justify-between items-center mb-2">
                         <span className="text-sm font-medium text-gray-600">
@@ -674,13 +798,72 @@ const Hydration = () => {
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                         <div
-                            className="bg-linear-to-r from-cyan-400 to-blue-500 h-4 rounded-full transition-all duration-500"
+                            className="bg-gradient-to-r from-cyan-400 to-blue-500 h-4 rounded-full transition-[width] duration-500 ease-out"
                             style={{ width: `${Math.min(progress, 100)}%` }}
                         />
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
                         {cupsConsumed} cups consumed • {cupsRemaining} cups remaining
+                        <span className="block mt-1 font-medium text-cyan-600">
+                            {Math.max(0, dailyGoal - waterIntake)}ml remaining to reach today&apos;s goal
+                        </span>
                     </p>
+                    {/* Hourly pace indicator */}
+                    {dailyGoal > 0 && (() => {
+                        const hoursInDay = 16;
+                        const now = new Date();
+                        const currentHour = now.getHours() + now.getMinutes() / 60;
+                        const startHour = 6;
+                        const elapsedHours = Math.max(0, Math.min(hoursInDay, currentHour - startHour));
+                        const expectedByNow = (dailyGoal / hoursInDay) * elapsedHours;
+                        const diff = expectedByNow - waterIntake;
+                        if (diff > 50) {
+                            return (
+                                <p className="text-amber-600 text-sm mt-2 font-medium">
+                                    You&apos;re {Math.round(diff)}ml behind optimal pace.
+                                </p>
+                            );
+                        }
+                        if (diff < -50) {
+                            return (
+                                <p className="text-green-600 text-sm mt-2 font-medium">
+                                    You&apos;re {Math.round(-diff)}ml ahead of optimal pace.
+                                </p>
+                            );
+                        }
+                        return null;
+                    })()}
+                </div>
+
+                {/* Today's timeline: Time | Amount */}
+                <div className="mb-8">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Today&apos;s intake</h4>
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-gray-50 text-left">
+                                    <th className="px-4 py-2 font-medium text-gray-700">Time</th>
+                                    <th className="px-4 py-2 font-medium text-gray-700">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(todayLog.entries || []).length === 0 ? (
+                                    <tr>
+                                        <td colSpan={2} className="px-4 py-3 text-gray-500">
+                                            No entries yet. Use Quick Add below.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    [...(todayLog.entries || [])].reverse().map((entry, i) => (
+                                        <tr key={i} className="border-t border-gray-100">
+                                            <td className="px-4 py-2 text-gray-700">{entry.time}</td>
+                                            <td className="px-4 py-2 text-cyan-600 font-medium">{entry.amount}ml</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {/* Quick Add Buttons */}
@@ -689,28 +872,28 @@ const Hydration = () => {
                     <div className="grid grid-cols-4 gap-3">
                         <button
                             onClick={() => addWater(250)}
-                            className="bg-cyan-100 hover:bg-cyan-200 text-cyan-700 font-medium py-3 rounded-lg transition-colors"
+                            className="bg-cyan-100 hover:bg-cyan-200 text-cyan-700 font-medium py-3 rounded-lg transition-all duration-200 active:scale-95"
                         >
                             <div className="text-lg mb-1">🥤</div>
                             <div className="text-xs">250ml</div>
                         </button>
                         <button
                             onClick={() => addWater(500)}
-                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium py-3 rounded-lg transition-colors"
+                            className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium py-3 rounded-lg transition-all duration-200 active:scale-95"
                         >
                             <div className="text-lg mb-1">🍶</div>
                             <div className="text-xs">500ml</div>
                         </button>
                         <button
                             onClick={() => addWater(750)}
-                            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-3 rounded-lg transition-colors"
+                            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-3 rounded-lg transition-all duration-200 active:scale-95"
                         >
                             <div className="text-lg mb-1">💧</div>
                             <div className="text-xs">750ml</div>
                         </button>
                         <button
                             onClick={() => addWater(1000)}
-                            className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium py-3 rounded-lg transition-colors"
+                            className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium py-3 rounded-lg transition-all duration-200 active:scale-95"
                         >
                             <div className="text-lg mb-1">🚰</div>
                             <div className="text-xs">1000ml</div>
@@ -756,7 +939,7 @@ const Hydration = () => {
                                         requestNotificationPermission();
                                     }
                                 }}
-                                className={`px-4 py-1 rounded-lg text-sm font-medium transition-colors ${notifications
+                                className={`px-4 py-1 rounded-lg text-sm font-medium transition-all duration-200 active:scale-95 ${notifications
                                     ? "bg-cyan-500 text-white"
                                     : "bg-gray-300 text-gray-700"
                                     }`}
@@ -768,7 +951,7 @@ const Hydration = () => {
                 </div>
 
                 {/* AI Tip */}
-                <div className="p-4 bg-linear-to-r from-cyan-50 to-blue-50 rounded-lg border-l-4 border-cyan-500">
+                <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-lg border-l-4 border-cyan-500">
                     <div className="flex items-start">
                         <span className="text-2xl mr-3">💡</span>
                         <div>
@@ -779,7 +962,7 @@ const Hydration = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };

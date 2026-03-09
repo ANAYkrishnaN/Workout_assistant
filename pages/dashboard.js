@@ -69,14 +69,14 @@ export default function WorkoutDashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-blue-50 to-cyan-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-cyan-200 border-t-cyan-500" style={{ animationDuration: "0.8s" }} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-cyan-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50">
       <Sidebar
         sidebarOpen={sidebarOpen}
         activeTab={activeTab}
@@ -87,15 +87,16 @@ export default function WorkoutDashboard() {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center"
+        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center transition-transform duration-200 active:scale-95 hover:shadow-xl"
+        aria-label={sidebarOpen ? "Close menu" : "Open menu"}
       >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        {sidebarOpen ? <X className="w-5 h-5 transition-transform duration-200" /> : <Menu className="w-5 h-5 transition-transform duration-200" />}
       </button>
 
       {/* Main Content */}
-      <main className="lg:ml-64 p-6">
+      <main className="lg:ml-64 p-6 transition-[margin] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 animate-fade-in">
           <div>
             <h2 className="text-3xl font-bold text-gray-800">
               Welcome, {firstName}
@@ -106,7 +107,7 @@ export default function WorkoutDashboard() {
           </div>
           <button
             onClick={() => router.push("/profile")}
-            className="w-12 h-12 rounded-full bg-linear-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white font-semibold shadow-lg cursor-pointer hover:shadow-xl transition-all"
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white font-semibold shadow-lg cursor-pointer hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 ease-out"
           >
             <User className="w-6 h-6" />
           </button>
@@ -114,36 +115,48 @@ export default function WorkoutDashboard() {
 
         {/* Dashboard Content */}
         {activeTab === "dashboard" && (
-          <HomeComponent setActiveTab={setActiveTab} />
+          <div className="animate-fade-in">
+            <HomeComponent setActiveTab={setActiveTab} />
+          </div>
         )}
 
         {/* Workouts Content */}
         {activeTab === "workouts" && (
-          <Workout />
+          <div className="animate-fade-in">
+            <Workout />
+          </div>
         )}
 
         {/* Hydration Content */}
         {activeTab === "hydration" && (
-          <Hydration />
+          <div className="animate-fade-in">
+            <Hydration />
+          </div>
         )}
 
         {/* Camera/Posture Tracker Tab */}
         {activeTab === "camera" && (
-          <Posture />
+          <div className="animate-fade-in">
+            <Posture />
+          </div>
         )}
 
         {/* Chat/AI Assistant Tab */}
         {activeTab === "chat" && (
-          <Chatbot />
+          <div className="animate-fade-in">
+            <Chatbot />
+          </div>
         )}
         {/* Diet Planner Tab */}
         {activeTab === "dietPlanner" && (
-          <DietPlanner />
+          <div className="animate-fade-in">
+            <DietPlanner />
+          </div>
         )}
 
         {/* Other tabs placeholder */}
         {!["dashboard", "camera", "chat", "hydration", "workouts", "dietPlanner"].includes(activeTab) && (
-          <div className="bg-white rounded-2xl p-8 shadow-lg">
+          <div className="bg-white rounded-2xl p-8 shadow-lg animate-fade-in">
             <h3 className="text-2xl font-bold text-gray-800 mb-4 capitalize">
               {activeTab}
             </h3>

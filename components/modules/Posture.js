@@ -22,14 +22,30 @@ const PostureCam = () => {
     const [error, setError] = useState('');
     const intervalRef = useRef(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL;
-    // console.log("API_URL:", process.env.NEXT_PUBLIC_API_URL);
-
-
     const workouts = [
         'Push Up', 'Pull Up', 'Squat', 'Lunge', 'Biceps Curl',
         'Shoulder Press', 'Plank', 'Jumping Jack'
     ];
+
+    // Classify workout type for hydration: store in localStorage for hydration +300ml
+    const WORKOUT_TO_TYPE = {
+        Squat: 'Lower Body',
+        Lunge: 'Lower Body',
+        'Push Up': 'Upper Body',
+        'Pull Up': 'Upper Body',
+        'Biceps Curl': 'Upper Body',
+        'Shoulder Press': 'Upper Body',
+        Plank: 'Upper Body',
+        'Jumping Jack': 'Cardio',
+    };
+    const setLastDetectedWorkoutType = (workoutName) => {
+        const t = WORKOUT_TO_TYPE[workoutName];
+        if (t) {
+            try {
+                localStorage.setItem('lastDetectedWorkoutType', t);
+            } catch (_) {}
+        }
+    };
 
     // Initialize camera
     const startCamera = async () => {
@@ -59,32 +75,40 @@ const PostureCam = () => {
         }
     };
 
-    // Create session
+    // Create session via Next.js API route
     const createSession = async () => {
         try {
-            const formData = new FormData();
-            formData.append('workout_name', workout);
-            formData.append('mode', mode);
-            formData.append('target_reps', targetReps.toString());
-
-            const response = await fetch(`${API_URL}/create_session`, {
+            const response = await fetch('/api/posture/create_session', {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    workout_name: workout,
+                    mode,
+                    target_reps: targetReps
+                })
             });
 
-            if (!response.ok) throw new Error('Failed to create session');
+            if (!response.ok) {
+                const text = await response.text();
+                let detail = text;
+                try {
+                    const json = JSON.parse(text);
+                    detail = json.detail || json.message || text;
+                } catch (_) {}
+                throw new Error(`Server returned ${response.status}: ${detail || response.statusText}`);
+            }
 
             const data = await response.json();
             setSessionId(data.session_id);
             return data.session_id;
         } catch (err) {
-            setError('Failed to create session: ' + err.message);
+            setError('Failed to create session: ' + (err.message || 'Unknown error'));
             console.error('Session creation error:', err);
             return null;
         }
     };
 
-    // Capture and send frame
+    // Capture and send frame (640x480, JPEG 0.5) via Next.js proxy → FastAPI MediaPipe
     const captureAndAnalyze = async (sid) => {
         if (!videoRef.current || !canvasRef.current) return;
 
@@ -92,14 +116,10 @@ const PostureCam = () => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
 
-        // Set canvas size to match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = 640;
+        canvas.height = 480;
+        ctx.drawImage(video, 0, 0, 640, 480);
 
-        // Draw current video frame to canvas
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Convert canvas to blob
         canvas.toBlob(async (blob) => {
             if (!blob) return;
 
@@ -111,7 +131,7 @@ const PostureCam = () => {
                 formData.append('mode', mode);
                 formData.append('target_reps', targetReps.toString());
 
-                const response = await fetch(`${API_URL}/analyze`, {
+                const response = await fetch('/api/posture/analyze', {
                     method: 'POST',
                     body: formData
                 });
@@ -121,22 +141,21 @@ const PostureCam = () => {
                 const data = await response.json();
 
                 setStats({
-                    reps: data.reps || 0,
-                    calories: data.calories || 0,
-                    angle: data.angle,
+                    reps: data.reps ?? 0,
+                    calories: data.calories ?? 0,
+                    angle: data.angle ?? null,
                     message: data.message || 'Keep going!',
-                    fps: data.fps || 0,
+                    fps: data.fps ?? 0,
                     detectedLabel: data.detected_label || ''
                 });
 
                 if (data.done_by_target) {
                     handleStop();
-                    // toast.success('Target reps completed! Great job!');
                 }
             } catch (err) {
                 console.error('Analysis error:', err);
             }
-        }, 'image/jpeg', 0.8);
+        }, 'image/jpeg', 0.5);
     };
 
     // Start tracking
@@ -150,6 +169,7 @@ const PostureCam = () => {
 
         setIsTracking(true);
         setError('');
+        setLastDetectedWorkoutType(workout);
 
         // Send frames every 200ms (5 FPS)
         intervalRef.current = setInterval(() => {
@@ -167,16 +187,14 @@ const PostureCam = () => {
         }
     };
 
-    // Reset session
+    // Reset session (Next.js proxy → FastAPI clears server-side rep state)
     const handleReset = async () => {
         if (sessionId) {
             try {
-                const formData = new FormData();
-                formData.append('session_id', sessionId);
-
-                await fetch(`${API_URL}/reset_session`, {
+                await fetch('/api/posture/reset_session', {
                     method: 'POST',
-                    body: formData
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
                 });
 
                 setStats({
