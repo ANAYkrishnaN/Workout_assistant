@@ -4,12 +4,8 @@ Run from backend dir: uvicorn main:app --reload
 """
 import io
 import os
-import json
 import numpy as np
 import cv2
-import urllib.request
-import urllib.error
-import urllib.parse
 import joblib
 import sklearn
 
@@ -20,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
 from ultralytics import YOLO
+from models.recipe_model import predict_dish, predict_top_dishes, get_recipe_by_name, load_model as load_recipe_model
+from models.hydration_model import predict_hydration as predict_hydration_ml, load_models as load_hydration_models
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 YOLO_MODEL_PATH = os.environ.get("YOLO_MODEL_PATH") or os.path.join(BASE_DIR, "runs", "detect", "smart_fridge", "weights", "best.pt")
@@ -36,21 +34,25 @@ print("Loading model from:", os.path.abspath(MODEL_PATH))
 
 class PredictHydrationRequest(BaseModel):
     weight: float
-    temperature: float | None = None
-    humidity: float | None = None
-    workout_minutes: float = 0
-    sleep_hours: float = 7
-    city: str | None = None
-    workout_intensity: Literal["none", "light", "moderate", "intense"] = "none"
-    detected_workout_type: str | None = None  # from posture: "Lower Body", "Upper Body", "Cardio"
+    age: float = 30
+    gender: int = 1  # 0=female, 1=male
+    activity_level: int = 2  # 1=low, 2=moderate, 3=high
+    weather: int = 1  # 0=cold, 1=normal, 2=hot
 
 
 class PredictHydrationResponse(BaseModel):
-    base_goal: float
-    adjusted_goal: float
-    adjustments: list[str]
-    adjustment_breakdown: list[dict] = []
-    explanation: str = ""
+    water_intake: float
+    hydration_level: Literal["Low", "Normal", "High"]
+    water_intake_ml: int
+
+
+class PredictRecipeRequest(BaseModel):
+    ingredients: list[str]
+
+
+class PredictRecipeResponse(BaseModel):
+    meal: dict
+    top_predictions: list[dict] = []
 
 app = FastAPI(title="Workout Assistant API", version="1.0.0")
 
@@ -76,35 +78,42 @@ if os.path.isfile(MODEL_PATH):
 else:
     print("Warning: models/diet_model.pkl not found. /predict-diet will return defaults.")
 
-# Hydration model (loaded at startup, fallback if missing)
-hydration_model = None
-HYDRATION_MODEL_PATH = os.path.join(BASE_DIR, "models", "hydration_model.pkl")
-if os.path.isfile(HYDRATION_MODEL_PATH):
-    hydration_model = joblib.load(HYDRATION_MODEL_PATH)
-else:
-    print("Warning: models/hydration_model.pkl not found. /predict-hydration will use formula fallback.")
-
-OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
+if not load_recipe_model():
+    print("Warning: recipe model/vectorizer not found. Recipe prediction will fallback.")
+if not load_hydration_models():
+    print("Warning: hydration regressor/classifier not found. Hydration prediction will fallback.")
 
 
-def _fetch_weather_openweather(city: str) -> tuple[float, float] | None:
-    """Fetch temp (°C) and humidity (%) from OpenWeather. Returns (temp, humidity) or None on error."""
-    if not OPENWEATHER_API_KEY or not city or not city.strip():
-        return None
-    try:
-        url = (
-            "https://api.openweathermap.org/data/2.5/weather?"
-            f"q={urllib.parse.quote(city.strip())}&appid={OPENWEATHER_API_KEY}&units=metric"
-        )
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-        temp = float(data.get("main", {}).get("temp", 22))
-        humidity = float(data.get("main", {}).get("humidity", 50))
-        return (round(temp, 1), round(humidity, 0))
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-        print("OpenWeather fetch error:", e)
-        return None
+def _normalize_label(label: str) -> str:
+    return str(label).strip().lower().replace("_", " ")
+
+
+def _detect_labels(
+    model: YOLO,
+    image: np.ndarray,
+    conf: float,
+    imgsz: int = 640,
+    allowed_names: set[str] | None = None,
+) -> dict[str, float]:
+    """
+    Return normalized labels mapped to best confidence score.
+    """
+    detected: dict[str, float] = {}
+    names = model.names
+    # Slightly larger inference size and lower conf improve recall for small/mid objects.
+    results = model(image, conf=conf, imgsz=imgsz, verbose=False)
+    for r in results:
+        for box in r.boxes:
+            class_id = int(box.cls[0])
+            raw_name = names[class_id]
+            label = _normalize_label(raw_name)
+            if allowed_names is not None and label not in allowed_names:
+                continue
+            score = float(box.conf[0]) if box.conf is not None else conf
+            prev = detected.get(label, 0.0)
+            if score > prev:
+                detected[label] = score
+    return detected
 
 
 class PredictDietRequest(BaseModel):
@@ -149,88 +158,53 @@ def predict_diet(req: PredictDietRequest):
     )
 
 
+@app.post("/predict-recipe", response_model=PredictRecipeResponse)
+def predict_recipe(req: PredictRecipeRequest):
+    ingredients = [str(i).strip().lower() for i in req.ingredients if str(i).strip()]
+    if not ingredients:
+        raise HTTPException(status_code=400, detail="ingredients are required")
+
+    dish_name = predict_dish(ingredients)
+    top = predict_top_dishes(ingredients, top_k=3)
+    recipe = get_recipe_by_name(dish_name) if dish_name else None
+    if not recipe and top:
+        recipe = get_recipe_by_name(top[0].get("dish_name", ""))
+
+    if not recipe:
+        # Soft fallback for deployability: still return deterministic structure.
+        recipe = {
+            "name": "Mixed Ingredient Bowl",
+            "ingredients": ingredients[:6],
+            "steps": [
+                "Wash and chop available ingredients.",
+                "Heat a pan with little oil.",
+                "Cook ingredients until tender.",
+                "Season with available powders and serve."
+            ],
+            "powders": ["salt", "pepper"],
+        }
+
+    return PredictRecipeResponse(meal=recipe, top_predictions=top)
+
+
 @app.post("/predict-hydration", response_model=PredictHydrationResponse)
 def predict_hydration(req: PredictHydrationRequest):
-    # Resolve temperature and humidity: fetch from OpenWeather if city + key, else use request
-    temperature = req.temperature
-    humidity = req.humidity
-    if req.city and OPENWEATHER_API_KEY:
-        weather = _fetch_weather_openweather(req.city)
-        if weather is not None:
-            temperature, humidity = weather
-    if temperature is None:
-        temperature = 22.0
-    if humidity is None:
-        humidity = 50.0
-
-    # Base water = weight * 35 ml
-    base_goal = round(float(req.weight * 35), 0)
-    adjusted_goal = float(base_goal)
-    adjustments = []
-    breakdown = []
-    reasons = []
-
-    # Temp: > 30°C → +700ml, > 25°C → +400ml
-    if temperature > 30:
-        adjusted_goal += 700
-        adjustments.append("Warm weather adjustment")
-        breakdown.append({"label": "Hot weather", "amount": 700})
-        reasons.append("hot weather")
-    elif temperature > 25:
-        adjusted_goal += 400
-        adjustments.append("Warm weather adjustment")
-        breakdown.append({"label": "Warm weather", "amount": 400})
-        reasons.append("warm weather")
-
-    # Humidity > 70% → +250ml
-    if humidity > 70:
-        adjusted_goal += 250
-        adjustments.append("High humidity adjustment")
-        breakdown.append({"label": "High humidity", "amount": 250})
-        reasons.append("high humidity")
-
-    # Manual workout intensity: Light +250, Moderate +500, Intense +750
-    if req.workout_intensity == "light":
-        adjusted_goal += 250
-        adjustments.append("Workout adjustment")
-        breakdown.append({"label": "Light workout", "amount": 250})
-        reasons.append("activity level")
-    elif req.workout_intensity == "moderate":
-        adjusted_goal += 500
-        adjustments.append("Workout adjustment")
-        breakdown.append({"label": "Moderate workout", "amount": 500})
-        reasons.append("activity level")
-    elif req.workout_intensity == "intense":
-        adjusted_goal += 750
-        adjustments.append("Workout adjustment")
-        breakdown.append({"label": "Intense workout", "amount": 750})
-        reasons.append("activity level")
-
-    # Posture-detected workout type → +300ml
-    if req.detected_workout_type and str(req.detected_workout_type).strip():
-        adjusted_goal += 300
-        adjustments.append("Detected workout adjustment")
-        breakdown.append({"label": "Detected workout", "amount": 300})
-        if "activity level" not in reasons:
-            reasons.append("activity level")
-
-    adjusted_goal = max(1200, round(adjusted_goal, 0))
-
-    # Build explanation message
-    if reasons:
-        explanation = (
-            f"Today's hydration goal adjusted to {int(adjusted_goal)}ml "
-            f"due to {' and '.join(reasons)}."
-        )
-    else:
-        explanation = f"Today's hydration goal is {int(adjusted_goal)}ml (base goal)."
-
+    payload = {
+        "weight": req.weight,
+        "age": req.age,
+        "gender": req.gender,
+        "activity_level": req.activity_level,
+        "weather": req.weather,
+    }
+    pred = predict_hydration_ml(payload)
+    water_intake = float(pred.get("water_intake", 2.5))
+    hydration_level = str(pred.get("hydration_level", "Normal"))
+    if hydration_level not in {"Low", "Normal", "High"}:
+        hydration_level = "Normal"
     return PredictHydrationResponse(
-        base_goal=base_goal,
-        adjusted_goal=int(adjusted_goal),
-        adjustments=adjustments if adjustments else ["Base goal only"],
-        adjustment_breakdown=breakdown,
-        explanation=explanation,
+        water_intake=round(water_intake, 2),
+        hydration_level=hydration_level,
+        water_intake_ml=int(round(water_intake * 1000)),
     )
 
 
@@ -252,14 +226,20 @@ async def detect(file: UploadFile = File(...)):
         image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if image is None:
             return {"detected_items": [], "error": "Invalid image file"}
-        results = yolo_model(image, conf=0.25)
-        names = yolo_model.names
-        detected_classes = []
-        for r in results:
-            for box in r.boxes:
-                class_id = int(box.cls[0])
-                detected_classes.append(names[class_id])
-        detected_items = list(dict.fromkeys(detected_classes))
+
+        # 1) Primary custom model (lower threshold for better recall on fridge clutter).
+        combined = _detect_labels(
+            model=yolo_model,
+            image=image,
+            conf=0.18,
+            imgsz=640,
+            allowed_names=None,
+        )
+
+        # Sort by confidence for stable, useful ordering.
+        detected_items = [
+            label for label, _ in sorted(combined.items(), key=lambda x: x[1], reverse=True)
+        ]
         return {"detected_items": detected_items}
     except Exception as e:
         return {"detected_items": [], "error": str(e)}

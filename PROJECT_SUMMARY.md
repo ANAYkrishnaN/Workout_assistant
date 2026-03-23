@@ -62,12 +62,28 @@ Frontend (Next.js, localhost:3000)
 
 ### 4.1 Food Detection Model
 
-- **Architecture:** Custom Smart Fridge YOLOv8 model (`best.pt`, 15 classes) via Ultralytics; loaded at backend startup from `backend/runs/detect/smart_fridge/weights/best.pt` (path overridable via `YOLO_MODEL_PATH`). If the file is missing, the backend still starts; `POST /detect` returns 503 with "Detection model not available."
-- **Role:** Runs object detection on the uploaded image; returns all 15 Smart Fridge class names (e.g. Beans, Egg, Tomato, etc.) as the ingredient list.
+- **Architecture:** Custom Smart Fridge YOLOv8 model (`best.pt`) via Ultralytics; loaded at backend startup from `backend/runs/detect/smart_fridge/weights/best.pt` (path overridable via `YOLO_MODEL_PATH`). If the file is missing, the backend still starts; `POST /detect` returns 503 with "Detection model not available."
+- **Current custom classes:** 18 classes after dataset expansion (`Beans`, `Bitter Gourd`, `Brinjal`, `Cabbage`, `Capsicum`, `Carrot`, `Chayote`, `Cucumber`, `Egg`, `Eggplant`, `Ginger`, `Green Chilly`, `Ladies Finger`, `Tomato`, `Turnip`, `Banana`, `Orange`, `Watermelon`).
+- **Role:** Runs object detection on uploaded fridge images and returns detected custom class names as ingredients.
 - **Output:** List of detected ingredient names (strings).
 - **Endpoint:** `POST /detect`
   - **Input:** Multipart form with image file (field name `file`).
   - **Output:** JSON `{ "detected_items": ["...", ...] }` or 503 if the model is not loaded.
+
+### 4.3 Dataset Expansion and Rebalancing Pipeline (Custom YOLO)
+
+- **Open Images class import:** Added `backend/expand_dataset_with_openimages.py` to merge downloaded Open Images classes into `backend/databases/smart_fridge` and auto-update `data.yaml`.
+- **Balanced import controls:** Supports `--train-per-class-limit`, `--valid-per-class-limit`, `--test-per-class-limit`, and `--train-max-objects-per-class` to prevent imported classes from dominating the dataset.
+- **Reset/reimport support:** `--reset-openimages-import` removes prior `oi_*` imports for clean reruns.
+- **Train-class rebalance:** Added `backend/rebalance_yolo_train.py` to augment minority classes in the train split (flip/brightness/contrast/blur) and reduce class imbalance.
+- **Class distribution reporting:** Upgraded `backend/check_class_distribution.py` to print class-wise object counts and percentages for train/valid/test.
+- **Training pipeline upgrades:** `backend/train_yolo.py` now supports CLI args, stronger default settings, explicit post-train validation, and ONNX export.
+
+### 4.4 Latest Trained Model (Deployment Candidate)
+
+- **Active checkpoint path:** `backend/runs/detect/smart_fridge/weights/best.pt`
+- **Final quick-run metrics snapshot:** best observed validation around `mAP50 ≈ 0.6246`, `mAP50-95 ≈ 0.4168` (time-boxed fine-tune run on expanded dataset).
+- **Smoke test output (`POST /detect`):** sample fridge image returned multiple items, e.g. `["orange", "tomato", "banana", "eggplant", "watermelon", "egg"]`.
 
 ### 4.2 Diet Prediction Model
 
@@ -114,6 +130,11 @@ uvicorn main:app --reload
 
 - `train_diet_model.py` generates the synthetic dataset, trains the RandomForestRegressor, and saves the model to `models/diet_model.pkl`.
 - `main.py` loads the diet model at startup from `backend/models/diet_model.pkl` and the YOLO model from `best.pt` (Smart Fridge) if present; exposes `/predict-diet`, `/detect`, and `GET /health`. If `best.pt` is missing, the app still runs and `/detect` returns 503.
+- YOLO dataset/training helper scripts added:
+  - `backend/check_class_distribution.py`
+  - `backend/expand_dataset_with_openimages.py`
+  - `backend/rebalance_yolo_train.py`
+  - `backend/train_yolo.py` (enhanced CLI training pipeline)
 
 ---
 
@@ -149,5 +170,7 @@ The Next.js app runs at **http://localhost:3000**. Set `NEXT_PUBLIC_API_URL=http
 - **Modular architecture** – Diet Planner, Posture Tracker, Chatbot, and other modules are kept separate; changes to diet/fridge do not alter Posture or Chatbot behavior.
 - **Posture and Chatbot modules** remain untouched by the diet/fridge and ML backend integration described in this summary.
 - **Detailed technical reference:** See **TECHNICAL_SUMMARY.md** for a full technical summary (folder structure, endpoint logic, model paths, frontend flow, environment, deployment, known issues) suitable for AI assistants or new developers.
-- **Limitations:** Diet model is trained on synthetic data only; YOLO uses the custom Smart Fridge 15-class model. Run uvicorn from `backend/` so model paths resolve correctly; in production use Docker and mount or set `YOLO_MODEL_PATH`.
+- **Model scope:** Detection is custom-model-only at runtime (`best.pt`), with no pretrained fallback inference path enabled in the backend API.
+- **Recent expansion limits:** Open Images source used in this implementation provided reliable additions for `Banana`, `Orange`, and `Watermelon`. Exact `Onion` and `Cauliflower` class names were not available in that source's boxable class list during import.
+- **Limitations:** Diet model is trained on synthetic data only; YOLO quality depends on dataset coverage/labels. Run uvicorn from `backend/` so model paths resolve correctly; in production use Docker and mount or set `YOLO_MODEL_PATH`.
 - **Deployment:** The project is ready for AWS deployment: Dockerfiles (backend + frontend), `docker-compose.yml`, and GitHub Actions CI (`.github/workflows/ci.yml`) for lint, test, build, and Docker image build. See **DEPLOYMENT.md** for production env vars, CORS, health check (`GET /health`), and security (secrets, HTTPS, optional password hashing).

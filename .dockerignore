@@ -1,6 +1,7 @@
 # Dependencies
 node_modules
 .venv
+backend/.venv
 venv
 __pycache__
 *.py[cod]
@@ -28,6 +29,9 @@ tests
 # Large binaries (mount or copy at deploy)
 *.pt
 backend/runs
+runs
+backend/databases
+backend/tools
 
 # Sentry
 .env.sentry-build-plugin

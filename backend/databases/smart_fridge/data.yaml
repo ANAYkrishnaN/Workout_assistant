@@ -4,8 +4,8 @@ train: train/images
 val: valid/images
 test: test/images
 
-nc: 15
-names: 
+nc: 18
+names:
   0: Beans
   1: Bitter Gourd
   2: Brinjal
@@ -21,6 +21,9 @@ names:
   12: Ladies Finger
   13: Tomato
   14: Turnip
+  15: Banana
+  16: Orange
+  17: Watermelon
 
 roboflow:
   workspace: personal-2uusc
