@@ -1,14 +1,26 @@
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 
+const isMongoOfflineError = (error) => {
+    const message = String(error?.message || "");
+    const causeMessage = String(error?.cause?.message || "");
+    const name = String(error?.name || "");
+    return (
+        error?.code === "MONGODB_OFFLINE" ||
+        name === "MongoServerSelectionError" ||
+        /ECONNREFUSED|server selection|topology|connect ECONNREFUSED/i.test(message) ||
+        /ECONNREFUSED|server selection|topology|connect ECONNREFUSED/i.test(causeMessage)
+    );
+};
+
 export default async function handler(req, res) {
-    await connectDB();
-
-    if (req.method !== "POST") {
-        return res.status(405).json({ error: "Only POST method allowed" });
-    }
-
     try {
+        await connectDB();
+
+        if (req.method !== "POST") {
+            return res.status(405).json({ error: "Only POST method allowed" });
+        }
+
         const { email, password } = req.body;
 
         if (!email || !password) {
@@ -37,6 +49,12 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
+        if (isMongoOfflineError(error)) {
+            return res.status(503).json({
+                error: "MongoDB is offline. Please start MongoDB and try again.",
+                code: "MONGODB_OFFLINE",
+            });
+        }
         return res.status(500).json({ error: error.message });
     }
 }
